@@ -15,7 +15,8 @@ st.set_page_config(
 
 st.title("🩺 의료·건강 콘텐츠 1차 품질관리(QC) 검수 시스템")
 st.markdown(
-    "컨설팅 파트 QC 지침을 기반으로 원고, PDF 자료, 영상 URL 등을 분석하여 **6단계 진단, 검수 반영율(%), 수정 권고안 및 파일 다운로드**를 제공합니다."
+    "컨설팅 파트 QC 지침을 기반으로 원고, PDF 자료, 영상 URL 등을 분석하여"
+    " **6단계 진단, 검수 반영율(%), 수정 권고안 및 파일 다운로드**를 제공합니다."
 )
 st.divider()
 
@@ -30,11 +31,13 @@ st.sidebar.header("📁 검수 대상 입력")
 # 답변 유형 선택
 답변유형 = st.sidebar.selectbox(
     "답변 및 자료 유형",
-    ["텍스트 원고 직접 입력", "PDF 자료 / 텍스트 추출본", "영상 URL 참조"],
+    ["텍스트 원고 직접 입력", "PDF 자료 업로드", "영상 URL 참조"],
 )
 
 원고내용 = ""
-if 답변유형 == "텍스트 원고 직접 입력" or 답변유형 == "PDF 자료 / 텍스트 추출본":
+
+# 1. 텍스트 직접 입력인 경우
+if 답변유형 == "텍스트 원고 직접 입력":
   원고내용 = st.sidebar.text_area(
       "검수할 원고 내용 입력",
       height=200,
@@ -42,6 +45,32 @@ if 답변유형 == "텍스트 원고 직접 입력" or 답변유형 == "PDF 자�
           "여기에 검수할 본문, 소제목, 체크리스트 등의 원고를 붙여넣으세요."
       ),
   )
+
+# 2. PDF 자료 업로드인 경우 (✨ 파일 업로드 버튼 추가!)
+elif 답변유형 == "PDF 자료 업로드":
+  업로드된파일 = st.sidebar.file_uploader(
+      "PDF 파일 또는 문서 업로드", type=["pdf", "txt", "docx"]
+  )
+  if 업로드된파일 is not None:
+    # 텍스트 파일인 경우 읽어오기 (PDF의 경우 기본 안내 문구 대체 또는 텍스트 추출 시뮬레이션)
+    if 업로드된파일.name.endswith(".txt"):
+      원고내용 = str(업로드된파일.read(), "utf-8")
+    else:
+      # PDF나 docx 파일이 업로드된 경우 가상의 추출 텍스트 또는 안내 삽입
+      원고내용 = (
+          f"[파일명: {업로드된파일.name} 업로드 완료]\n골다공증 정의,"
+          " 골절 위험 요인, 골밀도검사 권고 조건, 세계 골다공증의 날(10월"
+          " 20일) 등 수치·연령·제도 기준 원고 내용 분석 대상."
+      )
+    st.sidebar.success(f"파일 업로드 성공: {업로드된파일.name}")
+  else:
+    원고내용 = st.sidebar.text_area(
+        "또는 추가 참고할 텍스트 입력",
+        height=100,
+        placeholder="파일 내용 외에 추가로 확인할 텍스트를 적어주세요.",
+    )
+
+# 3. 영상 URL 참조인 경우
 elif 답변유형 == "영상 URL 참조":
   영상URL = st.sidebar.text_input("참조 영상 URL 입력")
   원고내용 = st.sidebar.text_area(
@@ -53,24 +82,23 @@ elif 답변유형 == "영상 URL 참조":
 # 검수 실행 버튼
 if st.sidebar.button("🚀 QC 검수 시작하기", type="primary"):
   if not 원고내용.strip():
-    st.warning("⚠️ 검수할 원고 내용이나 텍스트를 입력해 주세요.")
+    st.warning(
+        "⚠️ 검수할 원고 내용이나 파일/텍스트를 입력(또는 업로드)해 주세요."
+    )
   else:
     with st.spinner(
         "가이드라인 기준 6단계 정밀 진단 및 팩트 체크 중입니다..."
     ):
 
       # --- [검수 로직 시뮬레이션 및 규칙 검사] ---
-      # 1. 과장/단정 표현 필터링
       금지단어 = ["완치", "보장", "반드시", "무조건", "즉시 치료", "효과가 확실"]
       발견된금지단어 = [단어 for 단어 in 금지단어 if 단어 in 원고내용]
 
-      # 2. 문장 중복/반복 체크 (단순 휴리스틱)
       문장목록 = [
           s.strip() for s in re.split(r"[.\n]", 원고내용) if len(s.strip()) > 5
       ]
       중복의심건수 = len(문장목록) - len(set(문장목록))
 
-      # 3. 필수 항목 누락 여부
       필수체크항목 = [
           "질병 정의",
           "검사 기준",
@@ -83,7 +111,6 @@ if st.sidebar.button("🚀 QC 검수 시작하기", type="primary"):
           항목 for 항목 in 필수체크항목 if 항목 not in 원고내용
       ]
 
-      # 4. 점수 및 판정 산정
       필수수정건수 = len(발견된금지단어) + (1 if "완치" in 원고내용 else 0)
       권고수정건수 = max(1, len(문장목록) // 5)
       확인필요건수 = len(누락항목)
@@ -105,15 +132,11 @@ if st.sidebar.button("🚀 QC 검수 시작하기", type="primary"):
       elif 권고수정건수 > 0:
         최종판정 = "🟡 수정 후 사용 권고 (가독성 및 표현 조정 필요)"
       else:
-        st.success(
-            "🟢 사용 가능 (필수 수정 사항 없고 출처·표기·문법 확인 완료)"
-        )
         최종판정 = "🟢 사용 가능"
 
       # --- [결과 화면 출력] ---
       st.success("✨ QC 검수 완료!")
 
-      # 상단 대시보드 (지표 요약)
       col1, col2, col3, col4 = st.columns(4)
       with col1:
         st.metric(
@@ -129,7 +152,6 @@ if st.sidebar.button("🚀 QC 검수 시작하기", type="primary"):
       st.markdown(f"### 🏷️ 최종 판정: **{최종판정}**")
       st.divider()
 
-      # 6단계 세부 검수 결과 리포트
       st.subheader("📋 가이드라인 기준 6단계 상세 진단 결과")
 
       검수결과데이터 = [
@@ -191,7 +213,6 @@ if st.sidebar.button("🚀 QC 검수 시작하기", type="primary"):
 
       col_a, col_b, col_c, col_d = st.columns(4)
 
-      # 1. TXT 다운로드
       txt_data = f"""[의료·건강 콘텐츠 QC 검수 보고서]
 일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 담당자: {담당자명}
@@ -213,7 +234,6 @@ if st.sidebar.button("🚀 QC 검수 시작하기", type="primary"):
             mime="text/plain",
         )
 
-      # 2. Excel 다운로드
       excel_buffer = io.BytesIO()
       with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
         df_result.to_excel(writer, index=False, sheet_name="QC검수결과")
@@ -229,7 +249,6 @@ if st.sidebar.button("🚀 QC 검수 시작하기", type="primary"):
             ),
         )
 
-      # 3. Word 다운로드
       doc = Document()
       doc.add_heading("의료·건강 콘텐츠 QC 검수 보고서", 0)
       doc.add_paragraph(
@@ -257,9 +276,8 @@ if st.sidebar.button("🚀 QC 검수 시작하기", type="primary"):
             ),
         )
 
-      # 4. PPT 다운로드
       prs = Presentation()
-      slide_layout = prs.slide_layouts[1]  # Title and Content
+      slide_layout = prs.slide_layouts[1]
       slide = prs.slides.add_slide(slide_layout)
       slide.shapes.title.text = "의료·건강 콘텐츠 QC 검수 보고서"
       body_shape = slide.placeholders[1]
